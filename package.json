@@ -2,9 +2,10 @@
   "name": "lambda",
   "private": true,
   "scripts": {
-    "build": "esbuild --platform=node --target=node22 --format=esm --bundle --minify --legal-comments=none --outdir=dist --outbase=src --out-extension:.js=.mjs src/*/index.js"
+    "build": "esbuild --platform=node --target=node22 --format=esm --bundle --minify --legal-comments=none --external:@aws-sdk/* --outdir=dist --outbase=src --out-extension:.js=.mjs src/*/index.js"
   },
   "devDependencies": {
+    "@aws-sdk/client-ec2": "^3.1079.0",
     "esbuild": "0.28.1"
   }
 }
