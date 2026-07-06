@@ -1,26 +1,29 @@
-# Pinger
+# Lambda Tools
 
 ## Overview
 
-Pinger is a lightweight solution for keeping certain free-tier services active by ensuring they receive regular activity. Some services automatically pause due to inactivity, causing issues during use.
+A collection of small tools built to be deployed to [**AWS Lambda**](https://aws.amazon.com/lambda/). Each tool lives in its own directory under `src/` together with its own `README.md` covering everything tool-specific — what it does, which environment variables it needs, and how to deploy it. The build bundles every tool into its own directory under `dist/`, ready to be deployed independently.
 
-Pinger is built to be deployed to [**AWS Lambda**](https://aws.amazon.com/lambda/) and automatically called called using [**AWS EventBridge Scheduler**](https://aws.amazon.com/eventbridge/scheduler/) at specified intervals to ping a given URL, preventing services from entering an idle or paused state.
+```
+src/<tool>/
+  index.js    ->  dist/<tool>/index.mjs   (Lambda handler)
+  README.md                               (tool-specific docs: what it is, env vars, deployment)
+```
 
-## How It Works
+## Adding a New Tool
 
-1. **AWS Lambda Function**: A simple function using `axios` to send a request to a specified URL.
-2. **AWS EventBridge**: Schedules the Lambda function to run at regular intervals.
-3. **Environment Variables**: Uses an environment variable (`PING_URL`) to determine which service to ping.
+1. Create `src/<tool>/index.js` exporting a `handler` function.
+2. Create `src/<tool>/README.md` describing the tool and its environment variables.
+3. Run `pnpm build` — every tool is bundled to its own `dist/<tool>/index.mjs`.
+4. Deploy `dist/<tool>/` as its own Lambda function.
 
 ## Deployment Steps
 
 Before proceeding, ensure you have the following prerequisites:
 
-- **AWS**: Able to deploy to [AWS Lambda](https://aws.amazon.com/lambda/) and [AWS EventBridge Scheduler](https://aws.amazon.com/eventbridge/scheduler/)
+- **AWS**: Able to deploy to [AWS Lambda](https://aws.amazon.com/lambda/)
 - **Node.js**: Download and install from [nodejs](https://nodejs.org/)
 - **pnpm**: Download and install from [pnpm](https://pnpm.io/installation)
-
-\* _pnpm is recommended, but you may use any package manager that supports `package.json` (e.g., npm, yarn)._
 
 ### 1. Install Dependencies
 
@@ -38,14 +41,12 @@ Compile the project using:
 pnpm build
 ```
 
+Each tool is bundled to its own directory, e.g. `dist/<tool>/index.mjs`.
+
 ### 3. Deploy to AWS Lambda
 
-Set up your AWS Lambda function with the built file. Ensure the `PING_URL` environment variable is set in your Lambda configuration.
+Set up one AWS Lambda function per tool using its built directory (handler: `index.handler`), and configure the environment variables listed in the tool's `README.md`.
 
-### 4. Configure AWS EventBridge Scheduler
+### 4. Configure a Trigger
 
-Set up an AWS EventBridge Schedule to invoke the Lambda function at your desired intervals.
-
-### 5. Enjoy
-
-Once these steps are completed, your EventBridge Scheduler will trigger the Lambda function at the specified intervals. The Lambda function will then ping the designated URL, keeping your services active.
+Wire up whatever should invoke the function - for scheduled tools, an [AWS EventBridge Schedule](https://aws.amazon.com/eventbridge/scheduler/) at your desired intervals. See the tool's `README.md` for specifics.
