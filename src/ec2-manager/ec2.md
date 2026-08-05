@@ -21,10 +21,12 @@ free -h
 sudo timedatectl set-timezone Asia/Singapore
 sudo apt update && sudo apt upgrade -y
 sudo apt install -y git curl unattended-upgrades
+cat /etc/apt/apt.conf.d/20auto-upgrades   # both lines should be "1"
 ```
 
 - No Node/Docker — the Claude Code installer ships a native binary.
 - Timezone first, so `journalctl` reads in SGT. `unattended-upgrades` because the box is internet-facing, unattended, and holds credentials.
+- Installing enables it silently (the debconf prompt is low-priority, below the default threshold). If either line is `"0"` or the file is missing, `sudo dpkg-reconfigure -plow unattended-upgrades` gives you the prompt to turn it on.
 
 3. Clone the repository with a scoped PAT (EC2)
 
