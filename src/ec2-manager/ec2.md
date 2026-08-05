@@ -1,5 +1,7 @@
 # Sample EC2 — install steps
 
+A box whose only job is running Claude Code via remote control. Everything below survives a reboot.
+
 1. Configure swap (EC2)
 
 ```
@@ -11,52 +13,49 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 free -h
 ```
 
-2. Base dependencies (EC2)
+- Skip if the instance has ≥8 GB RAM. The `/etc/fstab` line is what brings swap back on boot.
+
+2. Base packages (EC2)
 
 ```
 sudo timedatectl set-timezone Asia/Singapore
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y \
-   unzip \
-   git \
-   tmux \
-   build-essential \
-   unattended-upgrades
-sudo dpkg-reconfigure -plow unattended-upgrades
+sudo apt install -y git curl unattended-upgrades
 ```
 
-3. Node via nvm (EC2)
+- No Node/Docker — the Claude Code installer ships a native binary.
+- Timezone first, so `journalctl` reads in SGT. `unattended-upgrades` because the box is internet-facing, unattended, and holds credentials.
+
+3. Clone the repository with a scoped PAT (EC2)
+
+Create a **fine-grained** GitHub token limited to `<TARGET_REPOSITORY>` — *Only select repositories*, *Contents: Read and write*.
 
 ```
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
-\. "$HOME/.nvm/nvm.sh"
-nvm install 24
-nvm alias default 24
-corepack enable
+umask 077
+cat > ~/pat.txt      # paste the token, Enter, then Ctrl-D
+chmod 600 ~/pat.txt
+
+git config --global credential.helper \
+  '!f() { echo username=x-access-token; echo "password=$(cat ~/pat.txt)"; }; f'
+git clone https://github.com/<OWNER>/<TARGET_REPOSITORY>.git ~/<TARGET_REPOSITORY>
 ```
 
-4. Docker (EC2)
+- Token stays in `~/pat.txt` only — not in `.git/config` or shell history. Rotate by overwriting the file.
+- Expired token = 403 on `git fetch`.
 
-```
-curl -fsSL https://get.docker.com | sudo sh
-sudo usermod -aG docker ubuntu
-newgrp docker
-docker run hello-world
-```
-
-5. Claude Code (EC2)
+4. Claude Code (EC2)
 
 ```
 curl -fsSL https://claude.ai/install.sh | bash
 claude --version
-cd ~/v-fork
+cd ~/<TARGET_REPOSITORY>
 claude
 ```
 
-- Sign in with Claude Pro/Max (not an API key) with `/login`.
-- Accept the workspace trust prompt.
+- Sign in with Claude Pro/Max (not an API key) with `/login`, then accept the workspace trust prompt.
+- Stored in `~/.claude` — one time only, no need to repeat after a restart.
 
-6. Claude Remote Control on boot (EC2)
+5. Claude Remote Control on boot (EC2)
 
 ```
 sudo tee /etc/systemd/system/claude-remote.service > /dev/null <<'EOF'
@@ -69,8 +68,8 @@ Wants=network-online.target
 Type=simple
 User=ubuntu
 Environment=HOME=/home/ubuntu
-WorkingDirectory=/home/ubuntu/v-fork
-ExecStart=/home/ubuntu/.local/bin/claude remote-control --name ec2-main
+WorkingDirectory=/home/ubuntu/<TARGET_REPOSITORY>
+ExecStart=/home/ubuntu/.local/bin/claude remote-control --name ec2-claude -c
 Restart=always
 RestartSec=10
 
@@ -81,17 +80,17 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now claude-remote.service
 ```
 
-- Phone: Claude app → **Code** tab → tap `ec2-main` (green dot = online). No SSH, outbound HTTPS only.
-- Requires step 5 done once first (Pro/Max login + workspace trust) and Claude Code v2.1.51+.
-- Set `WorkingDirectory` to your project folder — must match a directory where you've run `claude` and accepted the trust prompt, or the service exits with "Workspace not trusted".
-- Optional (v2.1.200+): `remote-control -c` resumes the previous conversation after a stop/start.
+- Phone: Claude app → **Code** tab → tap `ec2-claude` (green dot = online). No SSH, outbound HTTPS only.
+- Requires step 4 done once first, and Claude Code v2.1.51+ (`-c` resumes the last conversation, v2.1.200+).
+- `WorkingDirectory` must be a directory where you've accepted the trust prompt, or the service exits with "Workspace not trusted".
 
-7. Managing the service (EC2)
+6. Managing the service (EC2)
 
 ```
 systemctl status claude-remote             # is it running?
 journalctl -u claude-remote -n 50          # last 50 log lines
 journalctl -u claude-remote -f             # follow logs live (Ctrl-C to exit)
+journalctl -u claude-remote -b             # logs since this boot only
 sudo systemctl restart claude-remote       # restart manually
 sudo systemctl stop claude-remote          # stop until next boot
 sudo systemctl disable --now claude-remote # stop and remove from boot
@@ -99,3 +98,4 @@ sudo systemctl disable --now claude-remote # stop and remove from boot
 
 - `Active: active (running)` = healthy; `activating (auto-restart)` = crash-looping, check the logs.
 - After editing the unit file: `sudo systemctl daemon-reload && sudo systemctl restart claude-remote`.
+- `journalctl --utc` when correlating with AWS console events.
