@@ -56,6 +56,7 @@ claude
 
 - Sign in with Claude Pro/Max (not an API key) with `/login`, then accept the workspace trust prompt.
 - Stored in `~/.claude` — one time only, no need to repeat after a restart.
+- Send one message before quitting. Logging in alone writes no session file, and step 5's `-c` needs one to resume.
 
 5. Claude Remote Control on boot (EC2)
 
@@ -71,7 +72,7 @@ Type=simple
 User=ubuntu
 Environment=HOME=/home/ubuntu
 WorkingDirectory=/home/ubuntu/<TARGET_REPOSITORY>
-ExecStart=/home/ubuntu/.local/bin/claude remote-control --name ec2-claude -c
+ExecStart=/bin/sh -c '/home/ubuntu/.local/bin/claude remote-control --name ec2-claude -c || exec /home/ubuntu/.local/bin/claude remote-control --name ec2-claude'
 Restart=always
 RestartSec=10
 
@@ -85,17 +86,18 @@ sudo systemctl enable --now claude-remote.service
 - Phone: Claude app → **Code** tab → tap `ec2-claude` (green dot = online). No SSH, outbound HTTPS only.
 - Requires step 4 done once first, and Claude Code v2.1.51+ (`-c` resumes the last conversation, v2.1.200+).
 - `WorkingDirectory` must be a directory where you've accepted the trust prompt, or the service exits with "Workspace not trusted".
+- The `||` fallback matters: bare `-c` exits 1 with `No recent session found in this directory or its worktrees` when there is nothing recent to resume, and `Restart=always` turns that into a silent crash loop — the device flickers online for a second every 10s and never holds a session. The fallback starts a fresh session instead.
 
 6. Managing the service (EC2)
 
 ```
-systemctl status claude-remote             # is it running?
-journalctl -u claude-remote -n 50          # last 50 log lines
-journalctl -u claude-remote -f             # follow logs live (Ctrl-C to exit)
-journalctl -u claude-remote -b             # logs since this boot only
-sudo systemctl restart claude-remote       # restart manually
-sudo systemctl stop claude-remote          # stop until next boot
-sudo systemctl disable --now claude-remote # stop and remove from boot
+systemctl status claude-remote --no-pager    # is it running?
+journalctl -u claude-remote -n 50 --no-pager # last 50 log lines
+journalctl -u claude-remote -f               # follow logs live (Ctrl-C to exit)
+journalctl -u claude-remote -b --no-pager    # logs since this boot only
+sudo systemctl restart claude-remote         # restart manually
+sudo systemctl stop claude-remote            # stop until next boot
+sudo systemctl disable --now claude-remote   # stop and remove from boot
 ```
 
 - `Active: active (running)` = healthy; `activating (auto-restart)` = crash-looping, check the logs.
